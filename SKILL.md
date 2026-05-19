@@ -10,15 +10,24 @@ Dès que ce skill est activé, exécute le script de scraping, puis guide l'util
 
 ## 0. Lancement du scraping
 
-Lance le script :
+**Avant de scraper**, charge les analyses déjà effectuées :
 
 ```bash
-python ~/.claude/plugins/troy-pain-hunter/scripts/main.py
+python3 /home/mchanpeng/mchanpeng/git/sl/memory/troy_memory.py --list-analyses
+```
+
+Si des idées ont `status=commit` ou `status=fold`, affiche-les à l'utilisateur et **ne les ré-analyse pas** dans les étapes suivantes.
+
+Puis lance le scraping (par défaut tous les scopes) :
+
+```bash
+python3 ~/.claude/plugins/troy-pain-hunter/scripts/main.py --scope all
 ```
 
 Affiche à l'utilisateur :
-- Le nombre de résultats récupérés par source
-- Les éventuelles sources skippées (clés manquantes)
+- Le nombre de résultats nouveaux par scope (`by_scope`)
+- Le nombre d'URLs déjà vues (`already_seen`)
+- Les éventuelles sources skippées (`errors`)
 
 ---
 
@@ -105,6 +114,22 @@ Documente chaque hypothèse et son raisonnement. Classe l'opportunité :
 - **Venture** : SOM > $10m
 
 Compare la classification avec les objectifs de la pré-étape. Si l'utilisateur veut un side project mais que le SOM est "Low" → c'est parfaitement aligné. Si le SOM est "Venture" mais l'utilisateur veut bootstrapper avec 5h/semaine → incompatibilité à signaler.
+
+**Après avoir présenté le classement à l'utilisateur et reçu sa validation**, sauvegarde l'analyse :
+
+```bash
+python3 /home/mchanpeng/mchanpeng/git/sl/memory/troy_memory.py \
+  --save-analysis \
+  --title "<titre de l'opportunité>" \
+  --scope "<annoying|saas|physical|freelance>" \
+  --pain-score <total /15 de l'étape 1> \
+  --skill-match <% compétences matchées de l'étape 2> \
+  --som-class "<Low|Mid|Large|Venture>" \
+  --status pending \
+  --notes "<observations clés>"
+```
+
+Confirme à l'utilisateur que l'analyse a été sauvegardée (affiche l'`id` retourné).
 
 ---
 
