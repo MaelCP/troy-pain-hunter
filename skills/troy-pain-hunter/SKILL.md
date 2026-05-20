@@ -1,7 +1,6 @@
 ---
 name: troy-pain-hunter
-description: Scanne Reddit, Twitter, Facebook et Google pour détecter les frustrations exprimées publiquement, puis applique la méthode Troy (serial founder, portefeuille >$1bn) pour évaluer chaque pain point comme opportunité business en 5 étapes.
-allowed-tools: ["Bash", "Read"]
+description: Scanne Reddit, Twitter, Facebook, Google et offres de stages AI/LLM (Indeed, Welcome to the Jungle, LinkedIn) pour détecter les frustrations exprimées publiquement, puis applique la méthode Troy (serial founder, portefeuille >$1bn) pour évaluer chaque pain point comme opportunité business en 6 étapes. Étape 1.5 OBLIGATOIRE de deep-dive avant tout crash-test pour éviter de construire sur un pain culturellement résolu ou un faux signal. Si l'opportunité est validée, enchaîne automatiquement sur la spec produit (via superpowers:brainstorming) et le plan d'implémentation (via superpowers:writing-plans).
 ---
 
 # Troy Pain Hunter
@@ -13,7 +12,7 @@ Dès que ce skill est activé, exécute le script de scraping, puis guide l'util
 **Avant de scraper**, charge les analyses déjà effectuées :
 
 ```bash
-python3 /home/mchanpeng/mchanpeng/git/sl/memory/troy_memory.py --list-analyses
+/Users/satoshi/Projets/bizness/.venv/bin/python /Users/satoshi/Projets/bizness/troy-memory-engine/memory/troy_memory.py --list-analyses
 ```
 
 Si des idées ont `status=commit` ou `status=fold`, affiche-les à l'utilisateur et **ne les ré-analyse pas** dans les étapes suivantes.
@@ -21,8 +20,24 @@ Si des idées ont `status=commit` ou `status=fold`, affiche-les à l'utilisateur
 Puis lance le scraping (par défaut tous les scopes) :
 
 ```bash
-python3 ~/.claude/plugins/troy-pain-hunter/scripts/main.py --scope all
+/Users/satoshi/Projets/bizness/.venv/bin/python ~/.claude/plugins/troy-pain-hunter/scripts/main.py --scope all
 ```
+
+**Scopes disponibles** : `annoying`, `saas`, `physical`, `freelance`, `internships`, `all`.
+
+- `internships` : scrape les offres de stages IA/LLM/RAG/MLOps. Hypothèse : ce qu'une boîte ouvre comme stage à 6 mois sur l'IA est un proxy du SaaS qu'elle aimerait acheter mais qui n'existe pas. Très utile pour les opportunités B2B sous-explorées.
+  
+  **Sources qui marchent direct** (testées 2026-05-20) :
+  - **LinkedIn Jobs guest** : ✅ ~16 résultats / keyword / géo (FR + US)
+  - **Free-Work** (FR tech) : ✅ HTML SSR scrapable, filtre internship + apprenticeship natif
+  
+  **Sources stubbed (anti-scrape)** :
+  - **Indeed** : 404 RSS + 403 Cloudflare. Activer via `INDEED_API_KEY` (Publisher API)
+  - **Welcome to the Jungle** : SPA, clé Algolia non exposée. Activer via `WTTJ_ALGOLIA_KEY`
+  - **HelloWork** : SPA depuis 2026. Nécessite Playwright headless
+  - **Wellfound / Google site: search** : DDG et Bing bloquent les requêtes non-browser. À recoder via SerpAPI (clé `SERPAPI_KEY`)
+  
+  Le scope reste utile même avec seulement LinkedIn + Free-Work : ~25-40 offres / keyword.
 
 Affiche à l'utilisateur :
 - Le nombre de résultats nouveaux par scope (`by_scope`)
@@ -56,7 +71,79 @@ Ces réponses servent de filtre pour toutes les étapes suivantes. Une opportuni
 
 3. **Élimine tout ce qui a un score combiné < 8/15.**
 
+**Persistance obligatoire** : pour chaque URL traitée, appelle :
+
+```bash
+/Users/satoshi/Projets/bizness/.venv/bin/python /Users/satoshi/Projets/bizness/troy-memory-engine/memory/troy_memory.py \
+  --rate-url "<url>" \
+  --label "<noise|qualified>" \
+  --pain-score <0 si noise, sinon /15> \
+  --reason "<raison courte>"
+```
+
+Avant de re-scorer dans un futur run, charge les déjà-classés :
+
+```bash
+# Lister les pains déjà qualifiés (à recharger pour analyse continue)
+/Users/satoshi/Projets/bizness/.venv/bin/python /Users/satoshi/Projets/bizness/troy-memory-engine/memory/troy_memory.py --list-results --label qualified --min-pain 8
+
+# Stats globales
+/Users/satoshi/Projets/bizness/.venv/bin/python /Users/satoshi/Projets/bizness/troy-memory-engine/memory/troy_memory.py --stats
+```
+
+Les URLs étiquetées `noise` ne seront pas re-présentées à l'utilisateur dans les runs suivants (filtrer côté skill via `--label unrated` au démarrage).
+
 Présente le tableau des pains retenus à l'utilisateur et demande validation avant de continuer.
+
+---
+
+---
+
+## Étape 1.5 — Deep-dive OBLIGATOIRE (anti-crash-test inutile)
+
+🚨 **Cette étape est non-skippable.** Un score 1-15 sur un titre de post ne suffit PAS pour engager un crash-test. La méthode Troy demande de vérifier **avant de construire** que :
+
+1. Le pain est **volumétriquement** validé (pas un seul post isolé)
+2. La communauté n'a **pas déjà répondu culturellement** ("don't chase", "force users to ticket", "client's responsibility") — pattern qui tue l'opportunité SaaS
+3. Les concurrents revendiqués sont **vraiment** mentionnés par les utilisateurs (sinon ils sont fantômes = mauvais marketing OU pas vrai marché)
+4. **Si des concurrents existent : ont-ils des FAILLES** ? Des rage posts ("switched away from X", "I hate X"), des bugs récurrents, des features manquantes ? → opportunité de faire **mieux avec des specs en plus**
+
+### Lancer le deep-dive
+
+Pour chaque pain qualifié à l'Étape 1 (score ≥ 8/15), lancer :
+
+```bash
+/Users/satoshi/Projets/bizness/.venv/bin/python \
+  /Users/satoshi/Projets/bizness/troy-memory-engine/memory/deep_dive.py \
+  --url "<URL du post Reddit qualifié>" \
+  --competitors "Concurrent1" "Concurrent2" "Concurrent3" \
+  --search-terms "expression du pain 1" "expression du pain 2" \
+  --subs sub1 sub2 sub3
+```
+
+Le script retourne un JSON avec :
+- `thread` : top commentaires + cultural_dismissals détectés + tool_mentions
+- `related` : autres threads à fort engagement sur le même pain (>20 upvotes)
+- `competitor_complaints` : par concurrent, threads de plainte/rage trouvés
+- `competitor_snippets` : phrases extraites où un user décrit ce qu'il déteste dans un concurrent
+- `verdict` : `GO` | `WEAK_GO_DEEPER` | `KILL_OR_PIVOT` avec raisons
+
+### Règles d'interprétation
+
+- **Verdict `KILL_OR_PIVOT`** : éliminer le pain ou trouver un angle radicalement différent. Ne **jamais** passer à l'Étape 2/3 sur un pain KILL.
+- **Verdict `WEAK_GO_DEEPER`** : faire un 2ème deep-dive avec d'autres search-terms et subs, OU traiter comme WEAK_GO (proceed avec scepticisme).
+- **Verdict `GO`** : passer à l'Étape 2.
+- **Cultural dismissals ≥ 3** : drapeau rouge. La communauté gère le pain par la discipline, pas par un outil → marché culturellement résolu, l'outil n'aura pas de traction même s'il est bon.
+- **Competitor complaints non vides** : 💡 trésor pour le pitch. Lister chaque faille relevée → ce sont les **specs en plus** que ton produit doit avoir d'office.
+
+### Sortie attendue dans la conversation
+
+Présenter à l'utilisateur :
+1. Tableau pain × `verdict` × raisons clés
+2. Pour chaque concurrent ayant des plaintes : 2-3 quotes verbatim de users qui le critiquent → ce sont les **features différenciantes** à construire
+3. Décision : continuer / pivoter / kill
+
+**Persistance** : sauvegarder le verdict dans Troy memory via `--rate-url` (label `qualified_deep` ou `cultural_kill`).
 
 ---
 
@@ -118,7 +205,7 @@ Compare la classification avec les objectifs de la pré-étape. Si l'utilisateur
 **Après avoir présenté le classement à l'utilisateur et reçu sa validation**, sauvegarde l'analyse :
 
 ```bash
-python3 /home/mchanpeng/mchanpeng/git/sl/memory/troy_memory.py \
+/Users/satoshi/Projets/bizness/.venv/bin/python /Users/satoshi/Projets/bizness/troy-memory-engine/memory/troy_memory.py \
   --save-analysis \
   --title "<titre de l'opportunité>" \
   --scope "<annoying|saas|physical|freelance>" \
@@ -152,6 +239,53 @@ Propose la solution la plus dépouillée possible (Google Form + traitement manu
 **Signaux d'alarme :**
 - Tu dois contacter plus de 100 personnes dans ta cible avant que quelqu'un soit vaguement intéressé → l'opportunité est mauvaise ou ton approche est complètement fausse. Ne t'acharne pas.
 - Les gens sont intéressés mais ne veulent pas payer → ce n'est pas un pain business, c'est un "nice to have".
+
+---
+
+---
+
+## Étape 6 — Spec produit & Plan d'implémentation (automatique)
+
+**Déclenche cette étape UNIQUEMENT si** l'utilisateur valide une opportunité à l'Étape 5 (statut `committed` après crash-test réussi, OU s'il demande explicitement à passer à l'implémentation avant le crash-test).
+
+### 6.1 Brainstorming de la spec produit
+
+Invoque le skill `superpowers:brainstorming` via le tool `Skill`. Brief à passer :
+
+> "On a validé une opportunité business : `<titre opportunité>`. Pain : `<résumé Étape 1>`. Cible : `<persona Étape 2-3>`. Distribution : `<canaux Étape 3>`. Prix : `<modèle Étape 4>`. Crash-test : `<résumé Étape 5>`.
+>
+> Objectif du brainstorm : définir la spec produit MVP minimale qui permet de passer du Wizard of Oz manuel à un vrai produit auto-servi. Explorer features core vs nice-to-have, choix techniques (stack, hosting), modèle de données, parcours utilisateur principal."
+
+Récupère la sortie du brainstorming. Sauvegarde-la dans :
+```
+/Users/satoshi/Projets/bizness/troy-pain-hunter/crash-tests/<slug-opportunité>/06-spec.md
+```
+
+### 6.2 Plan d'implémentation
+
+Invoque le skill `superpowers:writing-plans` via le tool `Skill`. Passe-lui la spec produite en 6.1 comme entrée.
+
+Récupère le plan généré. Sauvegarde-le dans :
+```
+/Users/satoshi/Projets/bizness/troy-pain-hunter/crash-tests/<slug-opportunité>/07-plan.md
+```
+
+### 6.3 Mise à jour de la mémoire Troy
+
+Une fois spec + plan sauvegardés, mets à jour l'analyse en base :
+
+```bash
+/Users/satoshi/Projets/bizness/.venv/bin/python /Users/satoshi/Projets/bizness/troy-memory-engine/memory/troy_memory.py \
+  --update-status \
+  --id <id_analyse> \
+  --status implementing
+```
+
+Et confirme à l'utilisateur :
+- Spec écrite dans `06-spec.md`
+- Plan écrit dans `07-plan.md`
+- Statut Troy passé à `implementing`
+- Propose d'enchaîner avec `superpowers:executing-plans` si l'utilisateur veut démarrer l'implémentation tout de suite.
 
 ---
 

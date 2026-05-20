@@ -1,0 +1,10 @@
+{
+  "name": "troy-pain-hunter",
+  "description": "Scanne Reddit/Twitter/Facebook/Google pour détecter les pain points publics et applique la méthode Troy pour qualifier chaque opportunité business en 5 étapes.",
+  "version": "0.1.0",
+  "author": {
+    "name": "satoshi"
+  },
+  "license": "MIT",
+  "keywords": ["pain-points", "business", "scraping", "opportunity"]
+}
